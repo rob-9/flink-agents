@@ -490,6 +490,7 @@ class FlinkRunnerContext(RunnerContext, ExecutionReporter):
         self.__j_resource_adapter = j_resource_adapter
         # Resource caches for sub-agent scopes, keyed by the child plan JSON.
         self.__scoped_resource_caches: dict = {}
+        self.__scoped_plans: dict = {}
         self.executor = executor
         # Task lifecycle listeners the operator's callbacks fan out to,
         # registered via add_task_lifecycle_listener() (aligned with the Java
@@ -561,10 +562,23 @@ class FlinkRunnerContext(RunnerContext, ExecutionReporter):
             from flink_agents.plan.agent_plan import AgentPlan
 
             scoped_plan = AgentPlan.model_validate_json(plan_json)
-            cache = ResourceCache(scoped_plan.resource_providers, scoped_plan.config)
+            self.__scoped_plans[plan_json] = scoped_plan
+            cache = ResourceCache(
+                scoped_plan.resource_providers,
+                scoped_plan.config,
+                parent=self.__resource_cache,
+            )
             cache.set_java_resource_adapter(self.__j_resource_adapter)
             self.__scoped_resource_caches[plan_json] = cache
         return cache
+
+    def __active_plan(self) -> Any:
+        """Resolve action configuration in the plan currently executing."""
+        plan_json = self._j_runner_context.getActiveScopePlanJson()
+        if plan_json is None:
+            return self.__agent_plan
+        self.__active_resource_cache()
+        return self.__scoped_plans[plan_json]
 
     def __observe_subagent_setup(self, resource: Any) -> None:
         """Wire a lazily materialized sub-agent handle into the task lifecycle.
@@ -686,14 +700,14 @@ class FlinkRunnerContext(RunnerContext, ExecutionReporter):
     @override
     def action_config(self) -> Dict[str, Any]:
         """Get config of the action."""
-        return self.__agent_plan.get_action_config(
+        return self.__active_plan().get_action_config(
             self._j_runner_context.getActionName()
         )
 
     @override
     def get_action_config_value(self, key: str) -> Any:
         """Get config of the action."""
-        return self.__agent_plan.get_action_config_value(
+        return self.__active_plan().get_action_config_value(
             action_name=self._j_runner_context.getActionName(), key=key
         )
 
@@ -1467,6 +1481,14 @@ class FlinkRunnerContext(RunnerContext, ExecutionReporter):
         self.__ltm = None
 
         first_failure = _failure_of(ltm.close) if ltm is not None else None
+
+        scoped_caches = getattr(self, "_FlinkRunnerContext__scoped_resource_caches", {})
+        for cache in list(scoped_caches.values()):
+            first_failure = _first_or_logged(
+                _failure_of(cache.close), first_failure, "sub-agent resource cache"
+            )
+        scoped_caches.clear()
+        getattr(self, "_FlinkRunnerContext__scoped_plans", {}).clear()
 
         resource_cache = self.__resource_cache
         self.__resource_cache = None
