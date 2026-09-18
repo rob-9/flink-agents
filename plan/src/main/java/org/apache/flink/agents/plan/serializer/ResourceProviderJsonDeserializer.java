@@ -26,6 +26,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import org.apache.flink.agents.api.resource.ResourceDescriptor;
 import org.apache.flink.agents.api.resource.ResourceType;
+import org.apache.flink.agents.api.subagent.SubagentMetadata;
 import org.apache.flink.agents.plan.AgentPlan;
 import org.apache.flink.agents.plan.resourceprovider.JavaResourceProvider;
 import org.apache.flink.agents.plan.resourceprovider.JavaSerializableResourceProvider;
@@ -130,7 +131,10 @@ public class ResourceProviderJsonDeserializer extends StdDeserializer<ResourcePr
         String name = node.get("name").asText();
         try {
             AgentPlan childPlan = mapper.treeToValue(node.get("childPlan"), AgentPlan.class);
-            return new InternalSubagentProvider(name, childPlan);
+            return new InternalSubagentProvider(
+                    name,
+                    childPlan,
+                    mapper.treeToValue(node.get("subagent_metadata"), SubagentMetadata.class));
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }

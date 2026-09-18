@@ -23,6 +23,7 @@ import org.apache.flink.agents.api.resource.Resource;
 import org.apache.flink.agents.api.resource.ResourceContext;
 import org.apache.flink.agents.api.resource.ResourceType;
 import org.apache.flink.agents.api.resource.SerializableResource;
+import org.apache.flink.agents.api.subagent.SubagentMetadata;
 import org.apache.flink.agents.plan.AgentPlan;
 import org.apache.flink.agents.plan.resource.python.PythonPrompt;
 import org.apache.flink.agents.plan.resource.python.PythonTool;
@@ -99,6 +100,12 @@ public class PythonSerializableResourceProvider extends SerializableResourceProv
                 }
                 AgentPlan childPlan = OBJECT_MAPPER.convertValue(childPlanNode, AgentPlan.class);
                 String scope = (String) serialized.get("scope");
+                String inputSchema = (String) serialized.get("input_schema");
+                SubagentMetadata metadata =
+                        inputSchema == null
+                                ? null
+                                : new SubagentMetadata(
+                                        (String) serialized.get("description"), inputSchema);
                 Class<?> clazz =
                         Class.forName(
                                 INTERNAL_SETUP_RUNTIME_CLASS,
@@ -106,8 +113,11 @@ public class PythonSerializableResourceProvider extends SerializableResourceProv
                                 Thread.currentThread().getContextClassLoader());
                 resource =
                         (SerializableResource)
-                                clazz.getConstructor(String.class, AgentPlan.class)
-                                        .newInstance(scope, childPlan);
+                                clazz.getConstructor(
+                                                String.class,
+                                                AgentPlan.class,
+                                                SubagentMetadata.class)
+                                        .newInstance(scope, childPlan, metadata);
             } else {
                 throw new UnsupportedOperationException(
                         "Unsupported resource type: " + this.getType());

@@ -23,6 +23,7 @@ import org.apache.flink.agents.api.function.JavaFunction;
 import org.apache.flink.agents.api.resource.ResourceDescriptor;
 import org.apache.flink.agents.api.resource.ResourceType;
 import org.apache.flink.agents.api.resource.SerializableResource;
+import org.apache.flink.agents.api.subagent.SubagentMetadata;
 import org.apache.flink.api.java.tuple.Tuple3;
 
 import javax.annotation.Nullable;
@@ -31,12 +32,26 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /** Base class for defining agent logic. */
 public class Agent {
     private final Map<String, Tuple3<String[], Function, Map<String, Object>>> actions;
 
     private final Map<ResourceType, Map<String, Object>> resources;
+
+    @Nullable private SubagentMetadata subagentMetadata;
+
+    /** Describe this agent when it is registered as a model-callable AGENT resource. */
+    public Agent withSubagentMetadata(SubagentMetadata metadata) {
+        this.subagentMetadata = Objects.requireNonNull(metadata);
+        return this;
+    }
+
+    @Nullable
+    public SubagentMetadata getSubagentMetadata() {
+        return subagentMetadata;
+    }
 
     public Agent() {
         this.resources = new HashMap<>();

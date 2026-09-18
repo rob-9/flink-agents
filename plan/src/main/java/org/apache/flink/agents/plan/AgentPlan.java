@@ -633,7 +633,9 @@ public class AgentPlan implements Serializable {
                         AgentPlan childPlan =
                                 InternalSubagentCompilationHelper.getOrCompile(
                                         child, name, a -> new AgentPlan(a, this.config));
-                        addResourceProvider(new InternalSubagentProvider(name, childPlan));
+                        addResourceProvider(
+                                new InternalSubagentProvider(
+                                        name, childPlan, child.getSubagentMetadata()));
                     } else {
                         throw new IllegalArgumentException(
                                 "AGENT resource '"

@@ -18,13 +18,16 @@
 
 package org.apache.flink.agents.runtime.subagent;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.agents.api.Event;
 import org.apache.flink.agents.api.InputEvent;
 import org.apache.flink.agents.api.context.DurableCallable;
 import org.apache.flink.agents.api.context.RunnerContext;
 import org.apache.flink.agents.api.resource.Resource;
-import org.apache.flink.agents.api.resource.ResourceType;
+import org.apache.flink.agents.api.resource.ResourceContext;
 import org.apache.flink.agents.api.resource.ResourceDescriptor;
+import org.apache.flink.agents.api.resource.ResourceType;
+import org.apache.flink.agents.api.subagent.SubagentMetadata;
 import org.apache.flink.agents.api.subagent.SubagentResult;
 import org.apache.flink.agents.plan.AgentPlan;
 import org.apache.flink.agents.plan.actions.Action;
@@ -89,9 +92,38 @@ public class InternalSubagentSetup extends BaseDeferredSubagentSetup {
     private transient ActionMatcher actionMatcher;
 
     public InternalSubagentSetup(String scope, AgentPlan childPlan) {
-        super(new ResourceDescriptor(InternalSubagentSetup.class.getName(), Map.of("scope", scope, "child_plan", childPlan)), null);
-        this.scope = scope;
-        this.childPlan = childPlan;
+        this(scope, childPlan, null);
+    }
+
+    public InternalSubagentSetup(String scope, AgentPlan childPlan, SubagentMetadata metadata) {
+        this(
+                ResourceDescriptor.Builder.newBuilder(InternalSubagentSetup.class.getName())
+                        .addInitialArgument("scope", scope)
+                        .addInitialArgument("child_plan", childPlan)
+                        .addInitialArgument(
+                                FIELD_DESCRIPTION,
+                                metadata == null ? "" : metadata.getDescription())
+                        .addInitialArgument(
+                                FIELD_INPUT_SCHEMA,
+                                metadata == null ? null : metadata.getInputSchema())
+                        .build(),
+                null);
+    }
+
+    /** Rebuild both the child plan and callable metadata after descriptor serialization. */
+    public InternalSubagentSetup(ResourceDescriptor descriptor, ResourceContext resourceContext) {
+        super(descriptor, resourceContext);
+        this.scope = descriptor.getArgument("scope");
+        Object plan = descriptor.getArgument("child_plan");
+        this.childPlan =
+                plan instanceof AgentPlan
+                        ? (AgentPlan) plan
+                        : new ObjectMapper().convertValue(plan, AgentPlan.class);
+    }
+
+    @Override
+    public Class<?> getResultType() {
+        return List.class;
     }
 
     public String getScope() {

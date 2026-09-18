@@ -21,6 +21,7 @@ package org.apache.flink.agents.plan.subagent;
 import org.apache.flink.agents.api.resource.Resource;
 import org.apache.flink.agents.api.resource.ResourceContext;
 import org.apache.flink.agents.api.resource.ResourceType;
+import org.apache.flink.agents.api.subagent.SubagentMetadata;
 import org.apache.flink.agents.plan.AgentPlan;
 import org.apache.flink.agents.plan.resourceprovider.ResourceProvider;
 
@@ -44,11 +45,17 @@ public class InternalSubagentProvider extends ResourceProvider {
     private final String scope;
 
     private final AgentPlan childPlan;
+    private final SubagentMetadata metadata;
 
     public InternalSubagentProvider(String name, AgentPlan childPlan) {
+        this(name, childPlan, null);
+    }
+
+    public InternalSubagentProvider(String name, AgentPlan childPlan, SubagentMetadata metadata) {
         super(name, ResourceType.AGENT);
         this.scope = name;
         this.childPlan = childPlan;
+        this.metadata = metadata;
     }
 
     public String getScope() {
@@ -59,12 +66,17 @@ public class InternalSubagentProvider extends ResourceProvider {
         return childPlan;
     }
 
+    public SubagentMetadata getMetadata() {
+        return metadata;
+    }
+
     @Override
     public Resource provide(ResourceContext resourceContext) throws Exception {
         Class<?> clazz =
                 Class.forName(
                         RUNTIME_SETUP_CLASS, true, Thread.currentThread().getContextClassLoader());
         return (Resource)
-                clazz.getConstructor(String.class, AgentPlan.class).newInstance(scope, childPlan);
+                clazz.getConstructor(String.class, AgentPlan.class, SubagentMetadata.class)
+                        .newInstance(scope, childPlan, metadata);
     }
 }

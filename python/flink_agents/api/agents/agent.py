@@ -25,6 +25,7 @@ from flink_agents.api.resource import (
     SerializableResource,
     check_registrable_from_python,
 )
+from flink_agents.api.subagent import SubagentMetadata
 
 STRUCTURED_OUTPUT = "structured_output"
 
@@ -91,10 +92,24 @@ class Agent(ABC):
 
     def __init__(self) -> None:
         """Init method."""
+        self._subagent_metadata: SubagentMetadata | None = None
         self._actions = {}
         self._resources = {}
         for type in ResourceType:
             self._resources[type] = {}
+
+    @property
+    def subagent_metadata(self) -> SubagentMetadata | None:
+        """Describe this agent when registered as a model-callable resource."""
+        return self._subagent_metadata
+
+    def with_subagent_metadata(self, metadata: SubagentMetadata) -> "Agent":
+        """Set the callable description and schema for AGENT registration."""
+        if not isinstance(metadata, SubagentMetadata):
+            msg = "metadata must be a SubagentMetadata"
+            raise TypeError(msg)
+        self._subagent_metadata = metadata
+        return self
 
     @property
     def actions(

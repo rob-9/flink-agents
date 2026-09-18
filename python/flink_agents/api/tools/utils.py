@@ -132,8 +132,8 @@ def create_model_from_schema(name: str, schema: dict) -> type[BaseModel]:
             if type(None) in types:
                 types.remove(type(None))
                 if len(types) == 1:
-                    return typing.Optional[types[0]]  # noqa: UP007
-                return Optional[tuple(types)]  # # noqa: UP007
+                    return typing.Optional[types[0]]  # noqa: UP045
+                return Optional[tuple(types)]  # noqa: UP045
             else:
                 return Union[tuple(types)]  # noqa: UP007
         field_type = TYPE_MAPPING.get(field_schema.get("type"), typing.Any)  # type: ignore[arg-type]
@@ -166,7 +166,12 @@ def create_model_from_schema(name: str, schema: dict) -> type[BaseModel]:
             fields[field_name] = (field_type, Field(**field_params))
 
         models[model_name] = create_model(
-            model_name, **fields, __doc__=model_schema.get("description", "")
+            model_name,
+            **fields,
+            __doc__=model_schema.get("description", ""),
+            __config__={"extra": "forbid"}
+            if model_schema.get("additionalProperties") is False
+            else {},
         )  # type: ignore[call-overload]
 
     # Now, create the main model, resolving references
@@ -181,7 +186,14 @@ def create_model_from_schema(name: str, schema: dict) -> type[BaseModel]:
         field_params = __get_field_params_from_field_schema(field_schema=field_schema)
         main_fields[field_name] = (field_type, Field(**field_params))
 
-    return create_model(name, **main_fields, __doc__=schema.get("description", ""))
+    return create_model(
+        name,
+        **main_fields,
+        __doc__=schema.get("description", ""),
+        __config__={"extra": "forbid"}
+        if schema.get("additionalProperties") is False
+        else {},
+    )
 
 
 def create_model_from_java_tool_schema_str(

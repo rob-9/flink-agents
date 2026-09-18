@@ -229,3 +229,19 @@ def test_java_schema_round_trip_preserves_fields() -> None:
     for name, field in original.items():
         assert result[name].annotation is field.annotation
         assert result[name].description == field.description
+
+
+def test_create_model_preserves_forbidden_extra_fields() -> None:
+    """Callable schemas must keep additionalProperties false when reconstructed."""
+    rebuilt = create_model_from_schema(
+        "StrictPrompt",
+        {
+            "type": "object",
+            "properties": {"prompt": {"type": "string"}},
+            "required": ["prompt"],
+            "additionalProperties": False,
+        },
+    )
+    assert rebuilt.model_json_schema()["additionalProperties"] is False
+    with pytest.raises(ValueError):
+        rebuilt(prompt="task", unexpected="extra")

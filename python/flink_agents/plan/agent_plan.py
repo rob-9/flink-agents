@@ -461,7 +461,15 @@ def _get_resource_providers(
                     type=ResourceType.AGENT,
                     module="flink_agents.runtime.internal_subagent",
                     clazz="InternalSubagentSetup",
-                    serialized={"child_plan": child_plan, "scope": name},
+                    serialized={
+                        "child_plan": child_plan,
+                        "scope": name,
+                        **(
+                            value.subagent_metadata.model_dump()
+                            if value.subagent_metadata
+                            else {}
+                        ),
+                    },
                 )
             )
             continue

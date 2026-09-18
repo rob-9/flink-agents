@@ -95,6 +95,11 @@ class InternalSubagentSetup(DeferredSubagentSetup):
     child_plan: AgentPlan
     scope: str
 
+    @classmethod
+    def result_type(cls) -> type:
+        """Internal agents return a list, including structured output values."""
+        return list
+
     def prepare(
         self,
         ctx: RunnerContext,
