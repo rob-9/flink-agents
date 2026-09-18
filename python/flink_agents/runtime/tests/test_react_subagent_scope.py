@@ -85,3 +85,24 @@ def test_child_cache_owns_only_its_local_resources() -> None:
     shared.close.assert_not_called()
     parent.close()
     shared.close.assert_called_once()
+
+
+def test_internal_failure_uses_recorded_summary_instead_of_bridge_wrapper() -> None:
+    """Original and replayed bridge exceptions yield the same caller-visible error."""
+    from flink_agents.runtime.internal_subagent import (
+        InternalSubagentCallFactory,
+        InternalSubagentSetup,
+    )
+
+    setup = InternalSubagentSetup(scope="child", child_plan=AgentPlan(actions={}))
+    ctx = MagicMock(spec=InternalSubagentCallFactory)
+    ctx.subagent_failure_message.return_value = "ValueError: invalid prompt"
+    for wrapper in [
+        RuntimeError("original bridge failure"),
+        RuntimeError("replayed IllegalStateException"),
+    ]:
+        ctx.await_subagent_call.side_effect = wrapper
+        _, call, _ = setup.prepare(ctx, {}, "session", "call")
+        result = call()
+        assert not result.success
+        assert result.error_message == "ValueError: invalid prompt"

@@ -179,6 +179,10 @@ public class InternalSubagentSetup extends BaseDeferredSubagentSetup {
                 try {
                     return SubagentResult.ok(awaitSubagentCall(sessionId, callId));
                 } catch (Exception e) {
+                    InternalSubagentCallStatus status = getCallStatus(sessionId, callId);
+                    if (status != null && status.getFailureMessage() != null) {
+                        return SubagentResult.error(status.getFailureMessage());
+                    }
                     return SubagentResult.error(e);
                 }
             }

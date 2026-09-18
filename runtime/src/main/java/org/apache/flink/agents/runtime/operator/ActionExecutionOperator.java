@@ -568,6 +568,11 @@ public class ActionExecutionOperator<IN, OUT> extends AbstractStreamOperator<OUT
             isFinished = true;
             List<Event> replayedEvents = new ArrayList<>(actionState.getOutputEvents());
             if (actionTask.isSubagentEvent()) {
+                if (actionState.getSubagentFailureMessage() != null) {
+                    subagentScope
+                            .getCallStatus()
+                            .failAction(actionState.getSubagentFailureMessage());
+                }
                 // Child actions persist forwarded chat/tool envelopes as ordinary output events,
                 // and terminal OutputEvents separately. Both are required to resume a child loop.
                 replayedEvents.addAll(actionState.getSubagentResultEvents());
@@ -612,8 +617,14 @@ public class ActionExecutionOperator<IN, OUT> extends AbstractStreamOperator<OUT
                         // of failing the whole job.
                         InternalSubagentCallEvent envelope =
                                 (InternalSubagentCallEvent) actionTask.event;
-                        requireInternalCallStatus(envelope.getSessionId(), envelope.getCallId())
-                                .failAction(actionFailure);
+                        InternalSubagentCallStatus failedCall =
+                                requireInternalCallStatus(
+                                        envelope.getSessionId(), envelope.getCallId());
+                        failedCall.failAction(actionFailure);
+                        actionTask
+                                .getRunnerContext()
+                                .getSubagentScope()
+                                .setFailureMessage(failedCall.getFailureMessage());
                         actionTaskResult =
                                 actionTask
                                 .new ActionTaskResult(true, Collections.emptyList(), null);

@@ -40,6 +40,7 @@ public class InternalSubagentCallStatus {
     private final CompletableFuture<List<Object>> responseFuture = new CompletableFuture<>();
     private final IsolatedCachedMemoryStore sensoryMemory = new IsolatedCachedMemoryStore();
     private final IsolatedCachedMemoryStore shortTermMemory = new IsolatedCachedMemoryStore();
+    private volatile String failureMessage;
     private int runningActions;
     private int pendingEvents;
     private final List<Object> output = new ArrayList<>();
@@ -131,8 +132,23 @@ public class InternalSubagentCallStatus {
         return pendingEvents;
     }
 
+    public String getFailureMessage() {
+        return failureMessage;
+    }
+
     public void failAction(Throwable cause) {
-        responseFuture.completeExceptionally(cause);
+        if (!responseFuture.isDone()) {
+            failureMessage = cause.getClass().getName() + ": " + cause.getMessage();
+            responseFuture.completeExceptionally(cause);
+        }
+    }
+
+    /** Recreate a recorded failure without changing the summary returned to the caller. */
+    public void failAction(String message) {
+        if (!responseFuture.isDone()) {
+            failureMessage = message;
+            responseFuture.completeExceptionally(new IllegalStateException(message));
+        }
     }
 
     public void cancel() {

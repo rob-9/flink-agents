@@ -80,6 +80,10 @@ class InternalSubagentCallFactory(Protocol):
         """
         ...
 
+    def subagent_failure_message(self, session_id: str, call_id: str) -> str | None:
+        """Return the recorded failure summary, independent of bridge exceptions."""
+        ...
+
 
 class InternalSubagentSetup(DeferredSubagentSetup):
     """Compiled internal sub-agent, produced during ``AgentPlan`` compilation.
@@ -134,7 +138,8 @@ class InternalSubagentSetup(DeferredSubagentSetup):
             try:
                 output = ctx.await_subagent_call(session_id, call_id)
             except Exception as e:
-                return SubagentResult.error(e)
+                message = ctx.subagent_failure_message(session_id, call_id)
+                return SubagentResult.error(message if message is not None else e)
             return SubagentResult.ok(output)
 
         return (f"{session_id}#{call_id}", _call, None)

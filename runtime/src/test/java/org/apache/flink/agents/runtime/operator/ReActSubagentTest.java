@@ -328,6 +328,31 @@ public class ReActSubagentTest {
     }
 
     @Test
+    void failedChildRemainsFailedWhenOnlyItsStateWasPersisted() throws Exception {
+        InMemoryActionStateStore first = new SnapshotStore();
+        List<Object> failure = run(new AgentPlan(explicitParent()), 2L, first);
+        assertThat(failure.get(0).toString()).contains("only a string 'prompt'");
+        Map<String, ActionState> childStates = new LinkedHashMap<>();
+        first.getKeyedActionStates()
+                .get(2L)
+                .forEach(
+                        (key, state) -> {
+                            if (state.getTaskEvent() instanceof InternalSubagentCallEvent) {
+                                childStates.put(
+                                        key,
+                                        ActionStateSerde.deserialize(
+                                                ActionStateSerde.serialize(state)));
+                            }
+                        });
+        assertThat(childStates.values())
+                .anyMatch(state -> state.getSubagentFailureMessage() != null);
+        InMemoryActionStateStore recovered = new InMemoryActionStateStore(false);
+        recovered.getKeyedActionStates().put(2L, childStates);
+        assertThat(run(new AgentPlan(explicitParent()), 2L, recovered)).isEqualTo(failure);
+        assertThat(CALLS).isEmpty();
+    }
+
+    @Test
     void descriptorRoundTripPreservesCallableMetadataAndChildPlan() throws Exception {
         AgentPlan plan = new AgentPlan(explicitParent());
         InternalSubagentSetup setup =

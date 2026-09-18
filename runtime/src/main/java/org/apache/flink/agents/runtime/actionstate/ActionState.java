@@ -40,6 +40,9 @@ public class ActionState {
     /** Indicates whether the action has completed execution. */
     private boolean completed;
 
+    /** A failed child action must replay its failure even before the parent result is durable. */
+    private String subagentFailureMessage;
+
     /** Default constructor for Jackson deserialization. */
     private ActionState() {
         this.taskEvent = null;
@@ -120,6 +123,14 @@ public class ActionState {
 
     public List<Event> getSubagentResultEvents() {
         return subagentResultEvents;
+    }
+
+    public String getSubagentFailureMessage() {
+        return subagentFailureMessage;
+    }
+
+    public void setSubagentFailureMessage(String message) {
+        this.subagentFailureMessage = message;
     }
 
     /** Setters for the fields */
@@ -238,6 +249,7 @@ public class ActionState {
                         + (subagentResultEvents.isEmpty() ? 0 : subagentResultEvents.hashCode());
         result = 31 * result + (callResults.isEmpty() ? 0 : callResults.hashCode());
         result = 31 * result + (completed ? 1 : 0);
+        result = 31 * result + java.util.Objects.hashCode(subagentFailureMessage);
         return result;
     }
 
@@ -251,6 +263,7 @@ public class ActionState {
         }
         ActionState that = (ActionState) o;
         return completed == that.completed
+                && java.util.Objects.equals(subagentFailureMessage, that.subagentFailureMessage)
                 && java.util.Objects.equals(taskEvent, that.taskEvent)
                 && java.util.Objects.equals(sensoryMemoryUpdates, that.sensoryMemoryUpdates)
                 && java.util.Objects.equals(shortTermMemoryUpdates, that.shortTermMemoryUpdates)

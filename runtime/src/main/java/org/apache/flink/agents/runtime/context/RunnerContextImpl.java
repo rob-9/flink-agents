@@ -254,6 +254,15 @@ public class RunnerContextImpl implements RunnerContext, ExecutionReporter {
         return owner.awaitSubagentCall(sessionId, callId);
     }
 
+    /** Return the recorded summary to Python without adding a replay-exception wrapper. */
+    @Nullable
+    public String getSubagentFailureMessage(String sessionId, String callId) {
+        InternalSubagentSetup owner = internalCallOwners.get(sessionId);
+        InternalSubagentCallStatus status =
+                owner == null ? null : owner.getCallStatus(sessionId, callId);
+        return status == null ? null : status.getFailureMessage();
+    }
+
     /**
      * Registers the setup owning a call session; invoked by {@link
      * InternalSubagentSetup#bootstrap}.
@@ -1482,6 +1491,15 @@ public class RunnerContextImpl implements RunnerContext, ExecutionReporter {
         private final InternalSubagentCallStatus callStatus;
         private final BuiltInMetrics builtInMetrics;
         private final List<Event> outputEvents = new ArrayList<>();
+        private String failureMessage;
+
+        public String getFailureMessage() {
+            return failureMessage;
+        }
+
+        public void setFailureMessage(String failureMessage) {
+            this.failureMessage = failureMessage;
+        }
 
         public SubagentScope(
                 FlinkAgentsMetricGroupImpl agentMetricGroup,

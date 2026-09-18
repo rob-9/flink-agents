@@ -1461,6 +1461,10 @@ class FlinkRunnerContext(RunnerContext, ExecutionReporter):
         """
         return list(self._j_runner_context.awaitSubagentCall(session_id, call_id))
 
+    def subagent_failure_message(self, session_id: str, call_id: str) -> str | None:
+        """Read the durable failure summary instead of a reconstructed wrapper."""
+        return self._j_runner_context.getSubagentFailureMessage(session_id, call_id)
+
     @property
     @override
     def config(self) -> ReadableConfiguration:
