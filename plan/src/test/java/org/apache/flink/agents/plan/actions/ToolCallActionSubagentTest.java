@@ -29,12 +29,12 @@ import org.apache.flink.agents.api.event.ToolResponseEvent;
 import org.apache.flink.agents.api.memory.BaseLongTermMemory;
 import org.apache.flink.agents.api.metrics.FlinkAgentsMetricGroup;
 import org.apache.flink.agents.api.resource.Resource;
+import org.apache.flink.agents.api.resource.ResourceDescriptor;
 import org.apache.flink.agents.api.resource.ResourceType;
 import org.apache.flink.agents.api.subagent.SubagentFuture;
 import org.apache.flink.agents.api.subagent.SubagentFutures;
 import org.apache.flink.agents.api.subagent.SubagentResult;
 import org.apache.flink.agents.api.subagent.SubagentSetup;
-import org.apache.flink.agents.api.resource.ResourceDescriptor;
 import org.apache.flink.agents.api.tools.Tool;
 import org.apache.flink.agents.api.tools.ToolMetadata;
 import org.apache.flink.agents.api.tools.ToolParameters;
@@ -475,7 +475,11 @@ class ToolCallActionSubagentTest {
         }
 
         RecordingSubagentSetup(Class<?> clazz, SubagentResult outcome) {
-            super(ResourceDescriptor.Builder.newBuilder(clazz.getName()).addInitialArgument(FIELD_DESCRIPTION, "Reviews a diff.").build(), null);
+            super(
+                    ResourceDescriptor.Builder.newBuilder(clazz.getName())
+                            .addInitialArgument(FIELD_DESCRIPTION, "Reviews a diff.")
+                            .build(),
+                    null);
             this.outcome = outcome;
         }
 
@@ -573,7 +577,12 @@ class ToolCallActionSubagentTest {
         private final List<String> ops;
 
         OrderRecordingSubagentSetup(String label, List<String> ops) {
-            super(ResourceDescriptor.Builder.newBuilder(OrderRecordingSubagentSetup.class.getName()).addInitialArgument(FIELD_DESCRIPTION, "Orders a diff.").build(), null);
+            super(
+                    ResourceDescriptor.Builder.newBuilder(
+                                    OrderRecordingSubagentSetup.class.getName())
+                            .addInitialArgument(FIELD_DESCRIPTION, "Orders a diff.")
+                            .build(),
+                    null);
             this.label = label;
             this.ops = ops;
         }
@@ -635,7 +644,11 @@ class ToolCallActionSubagentTest {
         private final List<String> ops;
 
         InterruptingSubagentSetup(String label, List<String> ops) {
-            super(ResourceDescriptor.Builder.newBuilder(InterruptingSubagentSetup.class.getName()).addInitialArgument(FIELD_DESCRIPTION, "Interrupts on await.").build(), null);
+            super(
+                    ResourceDescriptor.Builder.newBuilder(InterruptingSubagentSetup.class.getName())
+                            .addInitialArgument(FIELD_DESCRIPTION, "Interrupts on await.")
+                            .build(),
+                    null);
             this.label = label;
             this.ops = ops;
         }
@@ -694,7 +707,11 @@ class ToolCallActionSubagentTest {
     /** Its await overflows the stack, to drive the {@link StackOverflowError} absorption path. */
     private static class OverflowingSubagentSetup extends SubagentSetup {
         OverflowingSubagentSetup() {
-            super(ResourceDescriptor.Builder.newBuilder(OverflowingSubagentSetup.class.getName()).addInitialArgument(FIELD_DESCRIPTION, "Overflows on await.").build(), null);
+            super(
+                    ResourceDescriptor.Builder.newBuilder(OverflowingSubagentSetup.class.getName())
+                            .addInitialArgument(FIELD_DESCRIPTION, "Overflows on await.")
+                            .build(),
+                    null);
         }
 
         @Override

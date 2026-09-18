@@ -146,9 +146,12 @@ class BaseChatModelSetupSubagentTest {
         }
 
         StubSubagentSetup(Class<?> clazz, String description, String inputSchema) {
-            super(ResourceDescriptor.Builder.newBuilder(clazz.getName())
-                    .addInitialArgument(FIELD_DESCRIPTION, description)
-                    .addInitialArgument(FIELD_INPUT_SCHEMA, inputSchema).build(), null);
+            super(
+                    ResourceDescriptor.Builder.newBuilder(clazz.getName())
+                            .addInitialArgument(FIELD_DESCRIPTION, description)
+                            .addInitialArgument(FIELD_INPUT_SCHEMA, inputSchema)
+                            .build(),
+                    null);
         }
 
         @Override

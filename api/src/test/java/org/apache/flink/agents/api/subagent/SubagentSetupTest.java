@@ -21,8 +21,8 @@ package org.apache.flink.agents.api.subagent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.agents.api.context.RunnerContext;
-import org.junit.jupiter.api.Test;
 import org.apache.flink.agents.api.resource.ResourceDescriptor;
+import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nullable;
 
@@ -56,9 +56,12 @@ public class SubagentSetupTest {
         }
 
         MetadataOnlySetup(Class<?> clazz, String description, String inputSchema) {
-            super(ResourceDescriptor.Builder.newBuilder(clazz.getName())
-                    .addInitialArgument(FIELD_DESCRIPTION, description)
-                    .addInitialArgument(FIELD_INPUT_SCHEMA, inputSchema).build(), null);
+            super(
+                    ResourceDescriptor.Builder.newBuilder(clazz.getName())
+                            .addInitialArgument(FIELD_DESCRIPTION, description)
+                            .addInitialArgument(FIELD_INPUT_SCHEMA, inputSchema)
+                            .build(),
+                    null);
         }
 
         @Override
