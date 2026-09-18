@@ -30,7 +30,6 @@ import org.apache.flink.agents.runtime.context.RunnerContextImpl;
 import org.apache.flink.agents.runtime.lifecycle.ComponentExecutionListener;
 import org.apache.flink.agents.runtime.memory.CachedMemoryStore;
 import org.apache.flink.agents.runtime.memory.InteranlBaseLongTermMemory;
-import org.apache.flink.agents.runtime.memory.IsolatedCachedMemoryStore;
 import org.apache.flink.agents.runtime.memory.MemoryObjectImpl;
 import org.apache.flink.agents.runtime.metrics.FlinkAgentsMetricGroupImpl;
 import org.apache.flink.agents.runtime.python.context.PythonRunnerContextImpl;
@@ -287,16 +286,13 @@ class ActionTaskContextManager implements AutoCloseable {
 
         RunnerContextImpl.MemoryContext memoryContext = getMemoryContext(actionTask);
         if (memoryContext == null) {
+            RunnerContextImpl.SubagentScope scope = getSubagentScope(actionTask);
             memoryContext =
-                    new RunnerContextImpl.MemoryContext(
-                            new CachedMemoryStore(sensoryMemState),
-                            new CachedMemoryStore(shortTermMemState));
-            // A sub-agent call runs against an isolated memory view so its reads/writes do not
-            // leak into the caller; nested calls reuse the already-isolated view.
-            if (getSubagentScope(actionTask) != null
-                    && !(memoryContext.getSensoryMemStore() instanceof IsolatedCachedMemoryStore)) {
-                memoryContext = memoryContext.createChildContext();
-            }
+                    scope == null
+                            ? new RunnerContextImpl.MemoryContext(
+                                    new CachedMemoryStore(sensoryMemState),
+                                    new CachedMemoryStore(shortTermMemState))
+                            : scope.getCallStatus().newMemoryContext();
             putMemoryContext(actionTask, memoryContext);
         }
 

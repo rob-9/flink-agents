@@ -566,11 +566,13 @@ public class ActionExecutionOperator<IN, OUT> extends AbstractStreamOperator<OUT
                     actionTask.action.getName(),
                     key);
             isFinished = true;
-            outputEvents =
-                    actionTask.finalizeOutputEvents(
-                            actionTask.isSubagentEvent()
-                                    ? actionState.getSubagentResultEvents()
-                                    : actionState.getOutputEvents());
+            List<Event> replayedEvents = new ArrayList<>(actionState.getOutputEvents());
+            if (actionTask.isSubagentEvent()) {
+                // Child actions persist forwarded chat/tool envelopes as ordinary output events,
+                // and terminal OutputEvents separately. Both are required to resume a child loop.
+                replayedEvents.addAll(actionState.getSubagentResultEvents());
+            }
+            outputEvents = actionTask.finalizeOutputEvents(replayedEvents);
             MemoryUpdateReplayer.replay(
                     actionTask.getRunnerContext().getShortTermMemory(),
                     actionState.getShortTermMemoryUpdates());

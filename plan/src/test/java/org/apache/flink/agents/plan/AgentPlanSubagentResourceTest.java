@@ -18,6 +18,7 @@
 
 package org.apache.flink.agents.plan;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.agents.api.agents.Agent;
 import org.apache.flink.agents.api.resource.Resource;
 import org.apache.flink.agents.api.resource.ResourceDescriptor;
@@ -25,9 +26,8 @@ import org.apache.flink.agents.api.resource.ResourceType;
 import org.apache.flink.agents.api.subagent.SubagentSetup;
 import org.apache.flink.agents.api.subagent.TestSubagentSetup;
 import org.apache.flink.agents.plan.resourceprovider.ResourceProvider;
-import org.apache.flink.agents.plan.tools.bash.BashTool;
-
 import org.apache.flink.agents.plan.subagent.InternalSubagentProvider;
+import org.apache.flink.agents.plan.tools.bash.BashTool;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -103,6 +103,25 @@ public class AgentPlanSubagentResourceTest {
         InternalSubagentProvider provider = (InternalSubagentProvider) agentProviders.get("child");
         assertThat(provider.getScope()).isEqualTo("child");
         assertThat(provider.getChildPlan()).isNotNull();
+    }
+
+    @Test
+    void nestedPlanSerializationKeepsTheProviderFieldsOutsideTheChild() throws Exception {
+        Agent root = new Agent();
+        root.addResource("child", ResourceType.AGENT, new Agent());
+        ObjectMapper mapper = new ObjectMapper();
+        String json = mapper.writeValueAsString(new AgentPlan(root));
+        assertThat(
+                        mapper.readTree(json)
+                                .path("resource_providers")
+                                .path("agent")
+                                .path("child")
+                                .path("__resource_provider_type__")
+                                .asText())
+                .isEqualTo("InternalSubagentProvider");
+        AgentPlan restored = mapper.readValue(json, AgentPlan.class);
+        assertThat(restored.getResourceProviders().get(ResourceType.AGENT).get("child"))
+                .isInstanceOf(InternalSubagentProvider.class);
     }
 
     @Test

@@ -18,6 +18,9 @@
 
 package org.apache.flink.agents.runtime.subagent;
 
+import org.apache.flink.agents.runtime.context.RunnerContextImpl;
+import org.apache.flink.agents.runtime.memory.IsolatedCachedMemoryStore;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -35,9 +38,16 @@ public class InternalSubagentCallStatus {
     private final String sessionId;
     private final InternalSubagentSetup setup;
     private final CompletableFuture<List<Object>> responseFuture = new CompletableFuture<>();
+    private final IsolatedCachedMemoryStore sensoryMemory = new IsolatedCachedMemoryStore();
+    private final IsolatedCachedMemoryStore shortTermMemory = new IsolatedCachedMemoryStore();
     private int runningActions;
     private int pendingEvents;
     private final List<Object> output = new ArrayList<>();
+
+    /** Each action tracks its own updates while sharing this invocation's memory values. */
+    public RunnerContextImpl.MemoryContext newMemoryContext() {
+        return new RunnerContextImpl.MemoryContext(sensoryMemory, shortTermMemory);
+    }
 
     public InternalSubagentCallStatus(
             String callId, String scope, String sessionId, InternalSubagentSetup setup) {

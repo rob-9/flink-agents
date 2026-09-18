@@ -17,60 +17,43 @@
  */
 package org.apache.flink.agents.runtime.memory;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Child memory store that reads through to the parent's unpersisted cache but keeps writes to
- * itself. {@link #persistCache()} discards child writes with a warning — cross-scope persist
- * behavior is not yet designed.
+ * Memory owned by one internal sub-agent invocation and shared by its actions. Child writes never
+ * enter the parent's keyed memory. Completed action-state records retain the memory updates and
+ * replay them into this store on recovery; the store itself lives only for the invocation.
  */
 public class IsolatedCachedMemoryStore extends CachedMemoryStore {
+    private final Map<String, MemoryObjectImpl.MemoryItem> values = new HashMap<>();
 
-    private static final Logger LOG = LoggerFactory.getLogger(IsolatedCachedMemoryStore.class);
-
-    private final CachedMemoryStore parent;
-    private final Map<String, MemoryObjectImpl.MemoryItem> ownCache = new HashMap<>();
-
-    public IsolatedCachedMemoryStore(CachedMemoryStore parent) {
+    public IsolatedCachedMemoryStore() {
         super(null);
-        this.parent = parent;
     }
 
     @Override
-    public MemoryObjectImpl.MemoryItem get(String key) throws Exception {
-        if (ownCache.containsKey(key)) {
-            return ownCache.get(key);
-        }
-        return parent.get(key);
+    public MemoryObjectImpl.MemoryItem get(String key) {
+        return values.get(key);
     }
 
     @Override
-    public void put(String key, MemoryObjectImpl.MemoryItem value) throws Exception {
-        ownCache.put(key, value);
+    public void put(String key, MemoryObjectImpl.MemoryItem value) {
+        values.put(key, value);
     }
 
     @Override
-    public boolean contains(String key) throws Exception {
-        return ownCache.containsKey(key) || parent.contains(key);
-    }
-
-    // TODO: design cross-scope memory persist behavior
-    @Override
-    public void persistCache() throws Exception {
-        if (!ownCache.isEmpty()) {
-            LOG.warn(
-                    "Subagent memory persist not yet supported; discarding {} cached entries.",
-                    ownCache.size());
-            ownCache.clear();
-        }
+    public boolean contains(String key) {
+        return values.containsKey(key);
     }
 
     @Override
-    public void clear() throws Exception {
-        ownCache.clear();
+    public void persistCache() {
+        // Retain writes for subsequent child actions. Durability is provided by their ActionState.
+    }
+
+    @Override
+    public void clear() {
+        values.clear();
     }
 }

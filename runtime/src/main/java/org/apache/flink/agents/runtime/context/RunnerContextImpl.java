@@ -45,7 +45,6 @@ import org.apache.flink.agents.runtime.lifecycle.ComponentExecutionListener;
 import org.apache.flink.agents.runtime.memory.CachedMemoryStore;
 import org.apache.flink.agents.runtime.memory.EventAttachmentUtils;
 import org.apache.flink.agents.runtime.memory.InteranlBaseLongTermMemory;
-import org.apache.flink.agents.runtime.memory.IsolatedCachedMemoryStore;
 import org.apache.flink.agents.runtime.memory.MemoryEventBuilder;
 import org.apache.flink.agents.runtime.memory.MemoryEventSettings;
 import org.apache.flink.agents.runtime.memory.MemoryObjectImpl;
@@ -125,12 +124,6 @@ public class RunnerContextImpl implements RunnerContext, ExecutionReporter {
 
         public CachedMemoryStore getSensoryMemStore() {
             return sensoryMemStore;
-        }
-
-        public MemoryContext createChildContext() {
-            return new MemoryContext(
-                    new IsolatedCachedMemoryStore(sensoryMemStore),
-                    new IsolatedCachedMemoryStore(shortTermMemStore));
         }
     }
 
