@@ -104,6 +104,9 @@ public class ReActSubagentTest {
             if (last.getRole() == MessageRole.TOOL) {
                 assertThat(last.getContent())
                         .contains(model.equals("child") ? "child evidence" : "child answer");
+                if (structured && model.equals("parent")) {
+                    assertThat(last.getContent()).isEqualTo("[{\"answer\":\"child answer\"}]");
+                }
                 return new ChatMessage(
                         MessageRole.ASSISTANT,
                         structured && model.equals("child")

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import pytest
+from pydantic import BaseModel
 from pyflink.common import Encoder
 from pyflink.common.typeinfo import Types
 from pyflink.datastream import KeySelector, StreamExecutionEnvironment
@@ -51,6 +52,12 @@ class InputKeySelector(KeySelector):
         return value
 
 
+class Answer(BaseModel):
+    """Structured child result."""
+
+    answer: str
+
+
 class ScriptedSetup(BaseChatModelSetup):
     """Pass the model name to a deterministic connection."""
 
@@ -74,12 +81,20 @@ class ScriptedConnection(BaseChatModelConnection):
         model = kwargs["model"]
         last = messages[-1]
         if last.role == MessageRole.TOOL:
-            expected = "child evidence" if model == "child" else "child answer"
+            expected = "child evidence" if model.startswith("child") else "child answer"
             if expected not in last.content:
                 msg = f"Wrong scoped result: {last.content}"
                 raise ValueError(msg)
-            return ChatMessage(role=MessageRole.ASSISTANT, content=f"{model} answer")
-        if model == "child":
+            if model == "parent_json" and last.content != '[{"answer":"child answer"}]':
+                msg = f"Structured child output lost its JSON shape: {last.content}"
+                raise ValueError(msg)
+            content = (
+                '{"answer":"child answer"}'
+                if model == "child_json"
+                else f"{model} answer"
+            )
+            return ChatMessage(role=MessageRole.ASSISTANT, content=content)
+        if model.startswith("child"):
             if (
                 messages[0].content != "Literal {prompt} instructions"
                 or last.content != "investigate"
@@ -130,25 +145,31 @@ class ExplicitParent(Agent):
     async def invoke(event: Event, ctx: RunnerContext) -> None:
         """Emit the full list of child outputs, or its failure reason."""
         child = ctx.get_resource("researcher", ResourceType.AGENT)
-        result = await (await child.submit(ctx, {"prompt": "investigate"}))
+        prompt = (
+            42 if InputEvent.from_event(event).input == "invalid" else "investigate"
+        )
+        result = await (await child.submit(ctx, {"prompt": prompt}))
         ctx.send_event(
             OutputEvent(
-                output=result.result if result.success else result.error_message
+                output=result.result
+                if result.success
+                else f"failed:{result.error_message}"
             )
         )
 
 
-def parent_agent(model_driven: bool) -> Agent:
+def parent_agent(model_driven: bool, structured: bool = False) -> Agent:
     """Build a parent and a child with colliding model/tool resource names."""
     child = ReActAgent.for_subagent(
         chat_model=ResourceDescriptor(
             clazz=f"{ScriptedSetup.__module__}.{ScriptedSetup.__name__}",
             connection="connection",
-            model="child",
+            model="child_json" if structured else "child",
             tools=["evidence"],
         ),
         description="Research a task",
         instructions="Literal {prompt} instructions",
+        output_schema=Answer if structured else None,
     )
     child.add_resource(
         "evidence", ResourceType.TOOL, Tool.from_callable(ChildTools.evidence)
@@ -158,7 +179,7 @@ def parent_agent(model_driven: bool) -> Agent:
             chat_model=ResourceDescriptor(
                 clazz=f"{ScriptedSetup.__module__}.{ScriptedSetup.__name__}",
                 connection="connection",
-                model="parent",
+                model="parent_json" if structured else "parent",
                 subagents=["researcher"],
             )
         )
@@ -179,8 +200,18 @@ def parent_agent(model_driven: bool) -> Agent:
     return parent
 
 
-@pytest.mark.parametrize("model_driven", [False, True])
-def test_react_subagent_tool_loop(tmp_path: Path, model_driven: bool) -> None:
+@pytest.mark.parametrize(
+    ("model_driven", "structured", "failure"),
+    [
+        (False, False, False),
+        (True, False, False),
+        (True, True, False),
+        (False, False, True),
+    ],
+)
+def test_react_subagent_tool_loop(
+    tmp_path: Path, model_driven: bool, structured: bool, failure: bool
+) -> None:
     """Both invocation paths run the child loop and resume the parent."""
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(1)
@@ -188,9 +219,10 @@ def test_react_subagent_tool_loop(tmp_path: Path, model_driven: bool) -> None:
     agents = AgentsExecutionEnvironment.get_execution_environment(env=env)
     output = (
         agents.from_datastream(
-            input=env.from_collection(["hello"]), key_selector=InputKeySelector()
+            input=env.from_collection(["invalid" if failure else "hello"]),
+            key_selector=InputKeySelector(),
         )
-        .apply(parent_agent(model_driven))
+        .apply(parent_agent(model_driven, structured))
         .to_datastream()
     )
     destination = tmp_path / "results"
@@ -207,4 +239,13 @@ def test_react_subagent_tool_loop(tmp_path: Path, model_driven: bool) -> None:
         if path.is_file()
         for line in path.read_text().splitlines()
     ]
-    assert lines == ["parent answer" if model_driven else "['child answer']"]
+    if failure:
+        assert "\n".join(lines).startswith("failed:")
+        return
+    assert lines == [
+        "parent_json answer"
+        if structured
+        else "parent answer"
+        if model_driven
+        else "['child answer']"
+    ]
