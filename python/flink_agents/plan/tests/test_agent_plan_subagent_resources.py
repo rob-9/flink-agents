@@ -108,6 +108,7 @@ def test_live_external_subagent_is_rebuilt_after_plan_json_round_trip() -> None:
     assert resolved.fail_on_call is True
     assert resolved.resource_type() == ResourceType.AGENT
 
+
 def test_child_agent_compiles_into_internal_provider() -> None:
     """A directly-registered child Agent becomes an internal sub-agent."""
     root = Agent()
@@ -176,3 +177,50 @@ def test_self_reference_is_rejected() -> None:
         match=r"Cyclic sub-agent definition detected: <root> -> itself",
     ):
         AgentPlan.from_agent(root, AgentConfiguration())
+
+
+def test_react_metadata_and_configuration_survive_plan_reconstruction() -> None:
+    """The setup offered to a model retains the child schema and prompt config."""
+    import json
+
+    from flink_agents.api.agents.react_agent import ReActAgent
+
+    child = ReActAgent.for_subagent(
+        chat_model=ResourceDescriptor(
+            clazz="flink_agents.integrations.chat_models.ollama_chat_model.OllamaChatModelSetup",
+            connection="shared",
+        ),
+        description="Research a task",
+        instructions="Use evidence",
+    )
+    root = Agent().add_resource("researcher", ResourceType.AGENT, child)
+    plan = AgentPlan.from_agent(root, AgentConfiguration())
+    restored = AgentPlan.model_validate_json(
+        plan.model_dump_json(serialize_as_any=True)
+    )
+    setup = restored.resource_providers[ResourceType.AGENT]["researcher"].provide(
+        resource_context=None, config=AgentConfiguration()
+    )
+    assert setup.description == "Research a task"
+    assert json.loads(setup.input_schema)["required"] == ["prompt"]
+    assert (
+        setup.child_plan.get_action_config_value(
+            "start_action", "_subagent_instructions"
+        )
+        == "Use evidence"
+    )
+
+
+def test_internal_structured_output_is_normalized_for_the_parent_model() -> None:
+    """Accumulated typed child outputs remain a list when rendered to the model."""
+    from pydantic import BaseModel
+
+    from flink_agents.plan.actions.tool_result_utils import normalize_agent_result
+    from flink_agents.runtime.internal_subagent import InternalSubagentSetup
+
+    class Answer(BaseModel):
+        answer: str
+
+    assert normalize_agent_result(
+        [Answer(answer="child answer")], InternalSubagentSetup.result_type()
+    ) == [{"answer": "child answer"}]
