@@ -37,6 +37,7 @@ import org.apache.flink.agents.runtime.condition.ActionMatcher;
 import org.apache.flink.agents.runtime.context.JavaRunnerContextImpl;
 import org.apache.flink.agents.runtime.context.RunnerContextImpl;
 import org.apache.flink.agents.runtime.operator.ActionTask;
+import org.apache.flink.util.ExceptionUtils;
 
 import javax.annotation.Nullable;
 
@@ -310,6 +311,37 @@ public class InternalSubagentSetup extends BaseDeferredSubagentSetup {
                                 childPlan.getResourceProviders(),
                                 userCodeClassLoader,
                                 rootResourceCache));
+    }
+
+    /** Releases owned child resources and wakes any calls still waiting during shutdown. */
+    @Override
+    public void close() throws Exception {
+        for (Map<String, InternalSubagentCallStatus> calls : callStatuses.values()) {
+            for (InternalSubagentCallStatus call : calls.values()) {
+                call.cancel();
+            }
+        }
+        callStatuses.clear();
+        keySessionIds.clear();
+        ownerContexts.forEach(
+                (sessionId, context) -> context.unregisterInternalCallOwner(sessionId));
+        ownerContexts.clear();
+
+        // Drop ownership before closing so repeated cleanup cannot close resources twice.
+        List<ResourceCache> caches = new ArrayList<>(childCaches.values());
+        childCaches.clear();
+        Throwable firstFailure = null;
+        for (ResourceCache cache : caches) {
+            try {
+                // ResourceCache closes only its own resources, including nested setups.
+                cache.close();
+            } catch (Throwable failure) {
+                firstFailure = ExceptionUtils.firstOrSuppressed(failure, firstFailure);
+            }
+        }
+        if (firstFailure != null) {
+            ExceptionUtils.rethrowException(firstFailure);
+        }
     }
 
     /**
