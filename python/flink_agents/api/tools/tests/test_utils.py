@@ -245,3 +245,113 @@ def test_create_model_preserves_forbidden_extra_fields() -> None:
     assert rebuilt.model_json_schema()["additionalProperties"] is False
     with pytest.raises(ValueError):
         rebuilt(prompt="task", unexpected="extra")
+
+
+def test_model_from_schema_preserves_required_and_default_independently() -> None:
+    """Optional is not nullable, and a default does not override required."""
+    rebuilt = create_model_from_schema(
+        "RequiredAndDefault",
+        {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string"},
+                "limit": {"type": "integer"},
+                "retries": {"type": "integer", "default": 3},
+                "mode": {"type": "string", "default": "fast"},
+            },
+            "required": ["prompt", "mode"],
+            "additionalProperties": False,
+        },
+    )
+    advertised = rebuilt.model_json_schema()
+    assert advertised["required"] == ["prompt", "mode"]
+    assert "default" not in advertised["properties"]["limit"]
+    assert advertised["properties"]["mode"]["default"] == "fast"
+    assert rebuilt(prompt="task", mode="slow").retries == 3
+    assert rebuilt(prompt="task", mode="slow").model_dump(exclude_unset=True) == {
+        "prompt": "task",
+        "mode": "slow",
+    }
+    with pytest.raises(ValidationError):
+        rebuilt(prompt="task")
+    with pytest.raises(ValidationError):
+        rebuilt(prompt="task", mode="slow", limit=None)
+
+
+@pytest.mark.parametrize("use_reference", [False, True])
+def test_subagent_callable_preserves_nested_object_schema(use_reference: bool) -> None:
+    """The schema advertised to a parent keeps closed nested inputs and arrays."""
+    from flink_agents.api.chat_models.subagent_tool import SubagentTool
+
+    request_schema = {
+        "type": "object",
+        "properties": {
+            "prompt": {"type": "string"},
+            "limit": {"type": "integer"},
+        },
+        "required": ["prompt"],
+        "additionalProperties": False,
+    }
+    nested_schema = {"$ref": "#/$defs/Request"} if use_reference else request_schema
+    tool = SubagentTool.of(
+        "researcher",
+        "Research tasks",
+        json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "request": nested_schema,
+                    "followups": {"type": "array", "items": nested_schema},
+                },
+                "required": ["request"],
+                "additionalProperties": False,
+                "$defs": {"Request": request_schema} if use_reference else {},
+            }
+        ),
+    )
+    rebuilt = tool.metadata.args_schema
+    advertised = rebuilt.model_json_schema()
+    ref = advertised["properties"]["request"]["$ref"].split("/")[-1]
+    nested = advertised["$defs"][ref]
+    assert nested["required"] == ["prompt"]
+    assert nested["additionalProperties"] is False
+    assert nested["properties"]["prompt"]["type"] == "string"
+    assert rebuilt(request={"prompt": "task"}).request.prompt == "task"
+    with pytest.raises(ValidationError):
+        rebuilt(request={})
+    with pytest.raises(ValidationError):
+        rebuilt(request={"prompt": "task", "extra": True})
+    with pytest.raises(ValidationError):
+        rebuilt(request={"prompt": "task"}, followups=[{"extra": True}])
+
+
+@pytest.mark.parametrize("additional_properties", [True, {}, {"type": "integer"}])
+def test_model_from_schema_keeps_dictionary_fields(additional_properties: Any) -> None:
+    """Free-form and typed dictionary fields remain dictionaries."""
+    rebuilt = create_model_from_schema(
+        "DictionaryInput",
+        {
+            "type": "object",
+            "properties": {
+                "values": {
+                    "type": "object",
+                    "additionalProperties": additional_properties,
+                }
+            },
+            "required": ["values"],
+        },
+    )
+    assert rebuilt(values={"a": 1}).values == {"a": 1}
+    if additional_properties == {"type": "integer"}:
+        with pytest.raises(ValidationError):
+            rebuilt(values={"a": "not an integer"})
+    else:
+        assert rebuilt(values={"a": {"b": "text"}}).values == {"a": {"b": "text"}}
+
+
+def test_model_from_schema_keeps_free_form_root_properties() -> None:
+    """A root object without declared properties still accepts arbitrary keys."""
+    rebuilt = create_model_from_schema(
+        "FreeForm", {"type": "object", "additionalProperties": True}
+    )
+    assert rebuilt(key="value").model_dump() == {"key": "value"}

@@ -18,7 +18,7 @@
 import json
 import typing
 from inspect import signature
-from typing import Any, Callable, Dict, Iterable, Optional, Type, Union
+from typing import Any, Callable, Dict, Iterable, Type, Union
 
 from docstring_parser import parse
 from pydantic import BaseModel, create_model
@@ -117,83 +117,73 @@ def create_model_from_schema(name: str, schema: dict) -> type[BaseModel]:
     """
     models: dict[str, type[BaseModel]] = {}
 
-    def resolve_field_type(field_schema: dict) -> type[typing.Any]:
-        """Resolves field type, including optional types and nullability."""
+    def resolve_field_type(field_schema: dict, field_name: str) -> type[typing.Any]:
+        """Resolve scalar, nested-object, array, and dictionary field types."""
         if "$ref" in field_schema:
             model_reference = field_schema["$ref"].split("/")[-1]
-            return models.get(model_reference, Any)  #
+            return models.get(model_reference, Any)
 
         if "anyOf" in field_schema:
             types = [
-                TYPE_MAPPING.get(t["type"], typing.Any)
-                for t in field_schema["anyOf"]
-                if t.get("type")
+                resolve_field_type(option, f"{field_name}_{index}")
+                for index, option in enumerate(field_schema["anyOf"])
             ]
-            if type(None) in types:
-                types.remove(type(None))
-                if len(types) == 1:
-                    return typing.Optional[types[0]]  # noqa: UP045
-                return Optional[tuple(types)]  # noqa: UP045
-            else:
-                return Union[tuple(types)]  # noqa: UP007
-        field_type = TYPE_MAPPING.get(field_schema.get("type"), typing.Any)  # type: ignore[arg-type]
+            return Union[tuple(types)]  # noqa: UP007
 
-        # Handle arrays (lists)
         if field_schema.get("type") == "array":
-            items = field_schema.get("items", {})
-            item_type = resolve_field_type(items)
+            item_type = resolve_field_type(
+                field_schema.get("items", {}), f"{field_name}_item"
+            )
             return list[item_type]  # type: ignore[valid-type]
 
-        # Handle objects (dicts with specified value types)
         if field_schema.get("type") == "object":
             additional_props = field_schema.get("additionalProperties")
+            if "properties" in field_schema or additional_props is False:
+                return build_model(field_name, field_schema)
             value_type = (
-                resolve_field_type(additional_props) if additional_props else typing.Any
+                resolve_field_type(additional_props, f"{field_name}_value")
+                if isinstance(additional_props, dict)
+                else typing.Any
             )
             return dict[str, value_type]  # type: ignore[valid-type]
 
-        return field_type  # type: ignore[return-value]
+        return TYPE_MAPPING.get(field_schema.get("type"), typing.Any)  # type: ignore[arg-type,return-value]
 
-    # First, create models for definitions
-    definitions = schema.get("$defs", {})
-    for model_name, model_schema in definitions.items():
+    def build_model(model_name: str, model_schema: dict) -> type[BaseModel]:
         fields = {}
+        required = model_schema.get("required", [])
         for field_name, field_schema in model_schema.get("properties", {}).items():
-            field_type = resolve_field_type(field_schema=field_schema)
-            field_params = __get_field_params_from_field_schema(
-                field_schema=field_schema
-            )
+            field_type = resolve_field_type(field_schema, f"{model_name}_{field_name}")
+            field_params = __get_field_params_from_field_schema(field_schema)
+            if field_name in required:
+                # JSON Schema defaults are annotations, not permission to omit a
+                # required property. Keep the annotation without supplying a value.
+                if "default" in field_params:
+                    field_params["json_schema_extra"] = {
+                        "default": field_params.pop("default")
+                    }
+            elif "default" not in field_params:
+                # Omission does not imply nullability. A factory allows omission
+                # without adding a null default to the advertised JSON Schema.
+                field_params["default_factory"] = lambda: None
             fields[field_name] = (field_type, Field(**field_params))
 
-        models[model_name] = create_model(
+        config = {}
+        if "additionalProperties" in model_schema:
+            config["extra"] = (
+                "forbid" if model_schema["additionalProperties"] is False else "allow"
+            )
+        return create_model(
             model_name,
             **fields,
             __doc__=model_schema.get("description", ""),
-            __config__={"extra": "forbid"}
-            if model_schema.get("additionalProperties") is False
-            else {},
-        )  # type: ignore[call-overload]
+            __config__=config,
+        )
 
-    # Now, create the main model, resolving references
-    main_fields = {}
-    for field_name, field_schema in schema.get("properties", {}).items():
-        if "$ref" in field_schema:
-            model_reference = field_schema["$ref"].split("/")[-1]
-            field_type = models.get(model_reference, Any)  # type: ignore[arg-type]
-        else:
-            field_type = resolve_field_type(field_schema=field_schema)
+    for model_name, model_schema in schema.get("$defs", {}).items():
+        models[model_name] = build_model(model_name, model_schema)
 
-        field_params = __get_field_params_from_field_schema(field_schema=field_schema)
-        main_fields[field_name] = (field_type, Field(**field_params))
-
-    return create_model(
-        name,
-        **main_fields,
-        __doc__=schema.get("description", ""),
-        __config__={"extra": "forbid"}
-        if schema.get("additionalProperties") is False
-        else {},
-    )
+    return build_model(name, schema)
 
 
 def create_model_from_java_tool_schema_str(
